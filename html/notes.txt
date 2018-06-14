@@ -1,0 +1,7 @@
+added stream script
+
+/five
+   javascript code to generate any code
+   
+/𝑥
+   prompts 𝑥

@@ -1,0 +1,22 @@
+2018 may 28th mon
+   added traffic light colors
+
+2018 may 25th Fri
+   draw statement now centers
+   fixed dimension cache
+   copied currentdrawing to drawings
+   *canvas needs simplifying as ui not ok
+   
+2018 May 24th Thu
+   tidied up TouchEvents and added comments
+   draw and scroll work well.
+
+added notes
+
+replaced custom event with standatd simpler events in touchevents.js
+
+removed math.js and built rudimentary matrix. inverse is reverse order of 
+matrix in scaleAndOffset
+
+working
+

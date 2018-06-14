@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=0"></meta>
+      <script>
+window.onerror = function(message, source, line) {
+   alert(message + "\n" + line);
+}
+
+function properties(obj) {
+    var ps = [];
+    for (var p in obj) {
+        ps.push(p);
+    }
+    ps.sort();
+    document.write(ps.join("<br \>"));
+}
+
+      </script>
+      <script src="debug.js"></script>
+      <style>
+body {
+   position: absolute;
+   left: 0px;
+   top: 0px;
+   width: 100%;
+   height: 100%;
+   margin: 0px;
+   background-color: black;
+   overflow: hidden;
+}
+
+#canvas{
+   position: absolute;
+   left: 0px;
+   top: 0px;
+   width: 100%;
+   height: 100%;
+   z-index: 1;
+}
+
+#debug {
+   color: white;
+   background-color: darkgrey;
+   font-family: "Courier new";
+   font-size: 10px;
+}
+
+      </style>
+   </head>
+   <body>
+      <script src="touchevents.js"></script>
+      <script src="drawing.js"></script>
+      <canvas id="canvas"></canvas>
+
+      <div id="debug">Debug</div>
+
+      <script>
+
+var debugElement = document.getElementById("debug");
+var filter = [
+  //"fingers",
+  //"startTouch",
+  // "endTouch", 
+  // "moveTouch",
+  //"offset",
+   // "scaleAndOffset",
+ // "Drawing",
+ // "Point",
+ // "maximum",
+   //"dimensions",
+   // "draw",
+    "penDown",
+    "penUp",
+ // "movePen",
+    "click",
+    "hit",
+    "longClick",
+    "doubleClick",
+    "setParent",
+  //"setTransform",
+  //"movePen",
+  // "fingers",
+  //"dimensions",
+  //"moveTouch",
+  //"offsetPoints",
+  //"movePen",
+  // "draw",
+  // "resize",
+   //  "drawStatement",
+  ""
+];
+//filter = undefined;
+var debug = new Debug(debugElement, 6, filter);
+
+var canvasElement = document.getElementById("canvas");
+
+var canvas = new Canvas(canvasElement);
+
+var touchEvents = new TouchEvents(canvas);
+
+window.onresize = function(event) {
+   draw();
+}
+
+var lastTimestamp = null;
+
+function draw() {
+
+   canvas.resize(
+      window.innerWidth,
+      window.innerHeight
+   );
+   
+      
+   window.requestAnimationFrame(
+      function (timestamp) {
+         if (lastTimestamp == timestamp)
+            return;
+            
+         canvas.draw();
+         
+         lasttimestamp = timestamp;
+      }
+   );
+}
+
+draw();
+
+function Canvas(element) {
+
+   this.drawings = [];
+   this.selected = null;
+   
+   var line = null;
+   var context = null;
+   
+   this.element = element;
+   
+   
+   this.matrix = new Matrix(
+      [
+         [1, 0, 0],
+         [0, 1, 0],
+         [0, 0, 1]
+      ]
+   );
+   
+   this.inverse = new Matrix(
+      [
+         [1, 0, 0],
+         [0, 1, 0],
+         [0, 0, 1]
+      ]
+   );
+   
+   this.scale = 1.0;
+   this.offset = new Point(0, 0);
+   this.center = new Point(0, 0);
+   
+   // click on the drawing
+   this.click = function(point) {
+      debug.add("click", point.round());
+      
+      var hit = this.hitTest(point);
+      
+      this.selected = hit;
+      
+      draw();
+
+      if (hit == null)
+         return;
+         
+      debug.add("hit", hit.statement);
+                  
+      hit.click(point);
+     
+   }
+   
+  function setParent(drawing, parent) {
+      debug.add("setParent", {
+         drawing: drawing.statement,
+         parent: parent.statement
+      });
+         
+      var oldParent = drawing.parent;
+         
+      // remove the drawing from the array of drawings
+      var oldDrawings = oldParent.drawings;
+      
+      var index = oldDrawings.indexOf(drawing);
+      
+      var drawingsHead = oldDrawings.slice(0, index);
+      
+      var drawingsTail = oldDrawings.slice(index + 1);
+      
+      oldParent.drawings = drawingsHead.concat(drawingsTail);
+      
+      // add the drawing to its parent
+         parent.drawings.push(drawing);
+         
+      drawing.parent = parent;
+
+     
+   }
+   
+   function findParent(drawing, parent) {
+      var dim = drawing.getDimensions();
+         
+      for (var index in parent.drawings) {
+         var test = parent.drawings[index];
+         if (drawing != test && test.getDimensions().contains(dim)) {
+            var parent = findParent(drawing, test);
+            if (parent)
+               return parent;
+            else
+               return test;
+         }
+      }
+      return null;
+   }
+
+   this.doubleClick = function(point) {
+      debug.add("doubleClick", point.round());
+   }
+   
+   this.longClick = function(point) {
+      debug.add("longClick", point.round());
+      
+      var hit = this.hitTest(point);
+      this.selected = hit;
+      
+      draw();
+      
+      if (hit == null)
+         return;
+         
+      hit.longClick(point);
+      
+   }
+
+
+   this.penDown = function(point) {
+      debug.add("penDown", point.round());
+      
+      if (!this.selected) {
+         var drawing = new Drawing(this);
+         this.drawings.push(drawing);
+         this.selected = drawing;
+      }
+      line = new Line(point);
+      this.selected.lines.push(line);
+      context.strokeStyle = "rgb(0,0,255)";
+      context.beginPath();
+      context.moveTo(line.start.x, line.start.y);
+      
+   }
+
+   this.movePen = function(point) {
+      debug.add("movePen",  point.round());
+   
+      line.points.push(point);
+      
+      context.lineTo(point.x, point.y);
+      
+      context.stroke();
+      
+      
+   }
+
+   this.penUp = function() {
+      debug.add("penUp");
+      if (line) {
+         line.clearDimensions();
+         this.selected.clearDimensions();
+         line = null;
+      
+         var parent = findParent(this.selected, this);
+        
+         if (parent == null)
+            parent = this;
+      
+         if (parent != this.selected.parent)
+            setParent(this.selected, parent);
+      }
+            
+   } 
+   
+   this.hitTest = function(point) {
+
+      for (var index in this.drawings) {
+         var drawing = this.drawings[index];
+         var hit= drawing.hitTest(point);
+         if (hit)
+            return hit;
+      }
+      
+      return null;
+   }
+
+   this.scaleAndOffset = function(offset, scale, center) {
+   
+      debug.add("scaleAndOffset",
+         {
+            offset: offset,
+            scale: Math.round(scale * 10000) / 10000,
+            center: center
+         }
+      );
+     
+
+      this.matrix = 
+         this.matrix
+         .multiply(
+            [
+               [1, 0, offset.x],
+               [0, 1, offset.y],
+               [0, 0, 1]
+            ]
+         )        
+         .multiply(
+            [
+               [1, 0, center.x],
+               [0, 1, center.y],
+               [0, 0, 1]
+            ]
+         )
+         .multiply(
+            [
+               [scale, 0, 0],
+               [0, scale, 0],
+               [0, 0, 1]
+            ]
+         )
+         .multiply(
+            [
+               [1, 0, -center.x],
+               [0, 1, -center.y],
+               [0, 0, 1]
+            ]
+         );
+ 
+      this.inverse =
+         (new Matrix(
+            [
+               [1, 0, center.x],
+               [0, 1, center.y],
+               [0, 0, 1]
+            ]
+         ))
+         .multiply(
+            [
+               [1 / scale, 0, 0],
+               [0, 1 / scale, 0],
+               [0, 0, 1]
+            ]
+         )
+         .multiply(
+            [
+               [1, 0, -center.x],
+               [0, 1, -center.y],
+               [0, 0, 1]
+            ]
+         )
+         .multiply(
+            [
+               [1, 0, -offset.x],
+               [0, 1, -offset.y],
+               [0, 0, 1]
+            ]
+         )
+         .multiply(this.inverse);
+         
+      this.center = center;
+      
+      this.offset =
+         this.offset
+         .offset(offset);
+      //   .offset(center)
+      //   .scale(scale)
+     //   .offset(center.negative());
+      
+      this.scale *= scale;
+   
+   }
+   
+   
+   this.setTransform = function(context) {
+   
+      debug.add("setTransform", this.matrix);
+   
+      context.scale(this.scale, this.scale);
+      
+      context.translate(this.offset.x, this.offset.y);
+      
+      // a c e
+      // b d f
+      // 0 0 1
+      var m = this.matrix.m;
+      
+      // reset the transform matrix
+      context.setTransform(
+         m[0][0], // a
+         m[1][0], // b
+         m[0][1], // c
+         m[1][1], // d
+         m[0][2], // e
+         m[1][2] // f
+      );
+
+   }
+  
+   // Draw all previous pen lines
+   this.draw = function () {
+   
+      debug.add("draw");
+      context = getContext();
+ 
+      // reset the transform matrix
+      context.setTransform(
+         1.0, // horizontal scale
+         0.0, // horizontal skew
+         0.0, // vertical skew
+         1.0, // vertical scale
+         0.0, // horizontal move
+         0.0 // vertical move
+      );
+   
+      // clear a rectangle
+      context.clearRect(
+         0,
+         0,
+         this.width,
+         this.height
+      );
+      
+      context.translate(this.offset.x, this.offset.y);
+      
+      context.translate(this.center.x, this.center.y);
+      
+      context.scale(this.scale, this.scale);
+      
+      context.translate(-this.center.x, -this.center.y);
+      
+
+      //this.setTransform(context);
+      
+      context.lineWidth = 1 / this.scale;
+      context.textHeight = 20 / this.scale;
+      context.font = context.textHeight.toString() + "px Courier New";
+      context.fillStyle = "red";
+
+      this.drawings.forEach(
+         function(drawing) {
+            drawing.draw(context);
+         }
+      );
+
+   }
+
+
+   this.resize = function(width, height) {
+              
+      var resized = false;
+      
+      if (this.width != width) {
+         this.width = element.width = width;
+         resized = true;
+      }
+   
+      if (this.height != height) {
+         this.height = element.height = height;
+         resized = true;
+      }
+   
+      if (resized || context == undefined) {
+         debug.add("resized", {width: this.width, height: this.height});
+         
+         context = getContext();     
+      }
+   }
+   
+   function getContext() {
+      debug.add("getContext");
+      context = element.getContext("2d");
+      return context;
+
+   }
+   
+}
+
+
+      </script>
+   </body>
+</html>
